@@ -36,19 +36,27 @@ jobs:
       run: |
         export ARCH=arm64
         mkdir -p out/arch/arm64/boot/dts
-        
-        # 1. bersihkan sisa build
         make -C $(pwd) O=$(pwd)/out mrproper
         
-        # 2. ambil config asli samsung a23
+        # 1. ambil config asli samsung a23
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- a23_eur_open_defconfig
         
-        # 3. --- INI KUNCI FIX-NYA ---
-        # otomatis isi 'Y' buat semua menu baru (termasuk ksu-next) biar nggak nanya interaktif
+        # 2. sync config (biar ksu-next masuk)
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- olddefconfig
+
+        # 3. paksa matiin debug info biar gak ada spam objdump
+        scripts/config --file out/.config -d DEBUG_INFO -d DEBUG_INFO_DWARF4 -d DEBUG_INFO_DWARF5
         
-        # 4. hajar kompilasi inti
-        make -j$(nproc --all) -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+        # 4. kompilasi + paksa dwarf 4 & abaikan warning biar gak mogok
+        make -j$(nproc --all) -C $(pwd) O=$(pwd)/out \
+             DTC_EXT=$(pwd)/tools/dtc \
+             CONFIG_BUILD_ARM64_DT_OVERLAY=y \
+             CLANG_TRIPLE=aarch64-linux-gnu- \
+             CC=clang \
+             CROSS_COMPILE=aarch64-linux-gnu- \
+             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+             KCFLAGS="-Wno-error -gdwarf-4"
+
 
     - name: Upload Hasil Kernel Image
       uses: actions/upload-artifact@v4
