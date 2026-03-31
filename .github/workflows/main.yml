@@ -8,6 +8,8 @@ jobs:
     steps:
     - name: Checkout Source Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # penting buat kernelsu biar dapet info versi git
 
     - name: Setup Environment & Toolchain
       run: |
@@ -17,40 +19,35 @@ jobs:
 
     - name: Manual Inject KernelSU-Next
       run: |
-        # 1. bersihkan folder lama jika ada
         rm -rf KernelSU-Next drivers/kernelsu
-        
-        # 2. clone repo ksu-next (menggunakan branch default/main)
         git clone --depth 1 https://github.com/KernelSU-Next/KernelSU-Next
-        
-        # 3. pindahkan isi folder kernel ke drivers/kernelsu agar path Kconfig sesuai standar
         cp -r KernelSU-Next/kernel drivers/kernelsu
         
-        # 4. hapus sisa suntikan lama di Kconfig dan Makefile untuk mencegah duplikasi
+        # bersihkan sisa suntikan lama
         sed -i '/kernelsu/d' drivers/Kconfig
         sed -i '/kernelsu/d' drivers/Makefile
         
-        # 5. suntik baris source ke drivers/Kconfig setelah baris pertama
+        # suntik di baris ke-2
         sed -i '2i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
-        
-        # 6. tambahkan objek kernelsu ke drivers/Makefile
         echo "obj-y += kernelsu/" >> drivers/Makefile
-        
         echo "[+] manual injection ksu-next success"
 
     - name: Build Kernel (Samsung A235F)
       run: |
         export ARCH=arm64
-        # pastikan folder output dan dts tersedia
         mkdir -p out/arch/arm64/boot/dts
         
-        # bersihkan environment sebelum build
+        # 1. bersihkan sisa build
         make -C $(pwd) O=$(pwd)/out mrproper
         
-        # buat konfigurasi dari defconfig samsung a23
+        # 2. ambil config asli samsung a23
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- a23_eur_open_defconfig
         
-        # proses kompilasi inti
+        # 3. --- INI KUNCI FIX-NYA ---
+        # otomatis isi 'Y' buat semua menu baru (termasuk ksu-next) biar nggak nanya interaktif
+        make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- olddefconfig
+        
+        # 4. hajar kompilasi inti
         make -j$(nproc --all) -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
     - name: Upload Hasil Kernel Image
