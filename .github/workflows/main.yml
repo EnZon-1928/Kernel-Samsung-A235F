@@ -8,8 +8,6 @@ jobs:
     steps:
     - name: Checkout Source Code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # penting buat kernelsu biar dapet info versi git
 
     - name: Setup Environment & Toolchain
       run: |
@@ -19,15 +17,20 @@ jobs:
 
     - name: Manual Inject KernelSU-Next
       run: |
+        # bersihkan sisa-sisa lama
         rm -rf KernelSU-Next drivers/kernelsu
-        git clone --depth 1 https://github.com/KernelSU-Next/KernelSU-Next
-        cp -r KernelSU-Next/kernel drivers/kernelsu
         
-        # bersihkan sisa suntikan lama
+        # clone repo ksu-next
+        git clone --depth 1 https://github.com/KernelSU-Next/KernelSU-Next
+        
+        # pindahkan isinya & HAPUS folder .git biar gak dianggap submodule
+        cp -r KernelSU-Next/kernel drivers/kernelsu
+        rm -rf KernelSU-Next
+        rm -rf drivers/kernelsu/.git
+        
+        # inject ke Kconfig & Makefile
         sed -i '/kernelsu/d' drivers/Kconfig
         sed -i '/kernelsu/d' drivers/Makefile
-        
-        # suntik di baris ke-2
         sed -i '2i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
         echo "obj-y += kernelsu/" >> drivers/Makefile
         echo "[+] manual injection ksu-next success"
@@ -38,16 +41,16 @@ jobs:
         mkdir -p out/arch/arm64/boot/dts
         make -C $(pwd) O=$(pwd)/out mrproper
         
-        # 1. ambil config asli samsung a23
+        # ambil config asli
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- a23_eur_open_defconfig
         
-        # 2. sync config (biar ksu-next masuk)
+        # otomatis isi menu baru
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- olddefconfig
 
-        # 3. paksa matiin debug info biar gak ada spam objdump
+        # matikan debug info & matikan semua warning agar log bersih
         scripts/config --file out/.config -d DEBUG_INFO -d DEBUG_INFO_DWARF4 -d DEBUG_INFO_DWARF5
         
-        # 4. kompilasi + paksa dwarf 4 & abaikan warning biar gak mogok
+        # kompilasi utama dengan flag -w (ignore all warnings)
         make -j$(nproc --all) -C $(pwd) O=$(pwd)/out \
              DTC_EXT=$(pwd)/tools/dtc \
              CONFIG_BUILD_ARM64_DT_OVERLAY=y \
@@ -55,8 +58,7 @@ jobs:
              CC=clang \
              CROSS_COMPILE=aarch64-linux-gnu- \
              CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-             KCFLAGS="-Wno-error -gdwarf-4"
-
+             KCFLAGS="-w -gdwarf-4"
 
     - name: Upload Hasil Kernel Image
       uses: actions/upload-artifact@v4
