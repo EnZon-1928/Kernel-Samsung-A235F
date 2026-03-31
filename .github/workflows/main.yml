@@ -17,18 +17,23 @@ jobs:
 
     - name: Manual Inject KernelSU-Next
       run: |
-        # bersihkan folder ksu lama biar nggak exit code 128
-        rm -rf drivers/kernelsu
+        # 1. bersihkan folder lama jika ada
+        rm -rf KernelSU-Next drivers/kernelsu
         
-        # tarik langsung branch 'next' biar nggak error pathspec
-        git clone --depth 1 -b next https://github.com/KernelSU-Next/KernelSU-Next drivers/kernelsu
+        # 2. clone repo ksu-next (menggunakan branch default/main)
+        git clone --depth 1 https://github.com/KernelSU-Next/KernelSU-Next
         
-        # bersihkan sisa suntikan lama biar nggak dobel di Kconfig/Makefile
+        # 3. pindahkan isi folder kernel ke drivers/kernelsu agar path Kconfig sesuai standar
+        cp -r KernelSU-Next/kernel drivers/kernelsu
+        
+        # 4. hapus sisa suntikan lama di Kconfig dan Makefile untuk mencegah duplikasi
         sed -i '/kernelsu/d' drivers/Kconfig
         sed -i '/kernelsu/d' drivers/Makefile
         
-        # suntik ulang di baris ke-2 (paling atas) biar nggak nabrak 'endmenu' di bawah
+        # 5. suntik baris source ke drivers/Kconfig setelah baris pertama
         sed -i '2i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+        
+        # 6. tambahkan objek kernelsu ke drivers/Makefile
         echo "obj-y += kernelsu/" >> drivers/Makefile
         
         echo "[+] manual injection ksu-next success"
@@ -36,17 +41,16 @@ jobs:
     - name: Build Kernel (Samsung A235F)
       run: |
         export ARCH=arm64
-        
-        # bikin folder dts bayangan di folder out biar makefile samsung nggak error 'find'
+        # pastikan folder output dan dts tersedia
         mkdir -p out/arch/arm64/boot/dts
         
-        # bersihkan sisa build (tanpa hapus folder kernelsu)
+        # bersihkan environment sebelum build
         make -C $(pwd) O=$(pwd)/out mrproper
         
-        # mulai racik defconfig
+        # buat konfigurasi dari defconfig samsung a23
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- a23_eur_open_defconfig
         
-        # kompilasi inti
+        # proses kompilasi inti
         make -j$(nproc --all) -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
     - name: Upload Hasil Kernel Image
