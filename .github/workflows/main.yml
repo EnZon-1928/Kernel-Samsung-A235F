@@ -1,6 +1,6 @@
 name: Build Kernel A235F KSU-Next
 on:
-  workflow_dispatch: # Biar lu bisa nge-klik tombol "Run" secara manual kapan aja
+  workflow_dispatch:
 
 jobs:
   build:
@@ -13,19 +13,32 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential bc bison flex libssl-dev clang lld gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi make git python2
+        # paksa symlink karena ubuntu 22.04 nggak punya paket python-is-python2
         sudo ln -sf /usr/bin/python2 /usr/bin/python
 
     - name: Inject KernelSU-Next
       run: |
-        curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+        # jalankan script resmi ksu-next
+        curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+        
+        # proteksi tambahan: jika folder gagal terbuat oleh script, tarik manual lewat git
+        if [ ! -d "drivers/kernelsu" ]; then
+          git clone https://github.com/KernelSU-Next/KernelSU-Next drivers/kernelsu
+        fi
 
     - name: Build Kernel (Samsung A235F)
       run: |
         export ARCH=arm64
-        # Eksekusi pembuatan konfigurasi dari defconfig
+        # buat folder output
+        mkdir -p out
+        
+        # bersihkan environment build
+        make -C $(pwd) O=$(pwd)/out mrproper
+        
+        # eksekusi konfigurasi defconfig (sesuai device a23 4g)
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- a23_eur_open_defconfig
         
-        # Eksekusi kompilasi inti menggunakan seluruh core CPU server
+        # proses kompilasi inti menggunakan seluruh core cpu server
         make -j$(nproc --all) -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
     - name: Upload Hasil Kernel Image
