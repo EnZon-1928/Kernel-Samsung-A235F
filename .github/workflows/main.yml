@@ -17,21 +17,36 @@ jobs:
 
     - name: Manual Inject KernelSU-Next
       run: |
+        # bersihkan folder ksu lama biar nggak exit code 128
         rm -rf drivers/kernelsu
-        git clone https://github.com/KernelSU-Next/KernelSU-Next drivers/kernelsu
-        sed -i '$i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+        
+        # tarik langsung branch 'next' biar nggak error pathspec
+        git clone --depth 1 -b next https://github.com/KernelSU-Next/KernelSU-Next drivers/kernelsu
+        
+        # bersihkan sisa suntikan lama biar nggak dobel di Kconfig/Makefile
+        sed -i '/kernelsu/d' drivers/Kconfig
+        sed -i '/kernelsu/d' drivers/Makefile
+        
+        # suntik ulang di baris ke-2 (paling atas) biar nggak nabrak 'endmenu' di bawah
+        sed -i '2i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
         echo "obj-y += kernelsu/" >> drivers/Makefile
+        
+        echo "[+] manual injection ksu-next success"
 
     - name: Build Kernel (Samsung A235F)
       run: |
         export ARCH=arm64
-        mkdir -p out
+        
+        # bikin folder dts bayangan di folder out biar makefile samsung nggak error 'find'
+        mkdir -p out/arch/arm64/boot/dts
+        
+        # bersihkan sisa build (tanpa hapus folder kernelsu)
         make -C $(pwd) O=$(pwd)/out mrproper
         
-        # ambil config asli samsung a23
+        # mulai racik defconfig
         make -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- a23_eur_open_defconfig
         
-        # hajar kompilasi
+        # kompilasi inti
         make -j$(nproc --all) -C $(pwd) O=$(pwd)/out DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y CLANG_TRIPLE=aarch64-linux-gnu- CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
     - name: Upload Hasil Kernel Image
